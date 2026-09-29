@@ -46,3 +46,18 @@ The app is linked to the library by target name: `target_link_libraries(fibonacc
 ```cmake
 set_target_properties(<target> PROPERTIES CXX_EXTENSIONS OFF)
 ```
+
+## 3. Header search path
+The library declares its include directory as a PUBLIC requirement:
+
+```cmake
+target_include_directories(fibonacci_lib PUBLIC include)
+```
+
+The application has no include setting of its own, it gets `-I.../libraries/fibonacci/include` only because it links to `fibonacci_lib`, which forwards its PUBLIC requirements to whoever links it.
+
+### Why the include path is PUBLIC, but sources and language are PRIVATE
+- **PRIVATE** = needed only to build this target. **PUBLIC** = needed to build this target and by anyone who uses it.
+- **Include path - PUBLIC.** `fibonacci.hpp` is the library's interface. `fibonacci.cpp` needs it to compile the library, and `main.cpp` needs it to call the functions. So the path is needed on both sides.
+- **Sources - PRIVATE.** `fibonacci.cpp` is compiled once into `libfibonacci_lib.a`. The app uses the finished compiled code through linking. If the source were PUBLIC, it would be compiled into the app too and the functions would be defined twice.
+- **Language (`cxx_std_23`, no extensions) - PRIVATE.** It controls how this target's `.cpp` files are compiled. The header uses only plain `int` functions, so users of the library don't need C++23. Each target states its own standard, the app sets C++23 in its own `CMakeLists.txt`.
