@@ -32,3 +32,36 @@ The missing information here is the declaration, because of this the compiler do
 ### 2. Missing definition:
 The linker is left with only the declarations with the gap in definitions, since we didn't include fibonacci.o to the linking stage, so it cannot resolve the symbols and refuses to produce the executable file.
 ![link-time error for missing definition step](screenshots/missing_definition_error.png)
+
+# Assignment 3
+
+## 1. Project layout
+
+```
+.git
+build/
+source/
+    CMakeLists.txt                  # top-level: project(), add_subdirectory(libraries/application)
+    application/
+        CMakeLists.txt              # fibonacci_app
+        src/main.cpp
+        include/                    # intentionally empty
+    libraries/
+        CMakeLists.txt              # add_subdirectory(fibonacci)
+        fibonacci/
+            CMakeLists.txt          # fibonacci_lib
+            src/fibonacci.cpp
+            include/fibonacci.hpp
+```
+
+The top-level `CMakeLists.txt` lives in `source/`, so all commands are run from the project root, pointing `-S` at `source/` and `-B` at a directory under `build/`:
+
+```bash
+cmake -S source -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++
+cmake --build build
+```
+
+### Why adding a directory does not replace linking a target
+`add_subdirectory(dir)` only tells CMake to also process `dir/CMakeLists.txt` and register the targets it defines in the same project. After that, `fibonacci_lib` and `fibonacci_app` simply both *exist* in the build graph - there is still no relationship between them. CMake does not guess that the app uses the library just because they are in the same project.
+
+That relationship is created only by `target_link_libraries(fibonacci_app PRIVATE fibonacci_lib)`. It (1) puts the library on the app's link line, so the linker can resolve `fibonacci_recursive`/`fibonacci_iterative` (without it we would get the same "undefined symbols" link error as in Assignment 2's missing-definition experiment), (2) makes the library build before the app, and (3) propagates the library's PUBLIC usage requirements, such as its include directory, to the app. In short: `add_subdirectory` decides *which targets exist*, linking decides *who depends on whom*.
