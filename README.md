@@ -61,3 +61,16 @@ The application has no include setting of its own, it gets `-I.../libraries/fibo
 - **Include path - PUBLIC.** `fibonacci.hpp` is the library's interface. `fibonacci.cpp` needs it to compile the library, and `main.cpp` needs it to call the functions. So the path is needed on both sides.
 - **Sources - PRIVATE.** `fibonacci.cpp` is compiled once into `libfibonacci_lib.a`. The app uses the finished compiled code through linking. If the source were PUBLIC, it would be compiled into the app too and the functions would be defined twice.
 - **Language (`cxx_std_23`, no extensions) - PRIVATE.** It controls how this target's `.cpp` files are compiled. The header uses only plain `int` functions, so users of the library don't need C++23. Each target states its own standard, the app sets C++23 in its own `CMakeLists.txt`.
+
+## 4. Debug and Release builds
+Each configuration gets its own build directory under `build/`. 
+```bash
+cmake -S source -B build/debug -G Ninja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug
+./build/debug/application/fibonacci_app
+
+cmake -S source -B build/release -G Ninja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Release
+./build/release/application/fibonacci_app
+```
+
+![debug build](screenshots/debug.png)
+![release build](screenshots/release.png)
