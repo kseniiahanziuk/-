@@ -74,3 +74,51 @@ cmake -S source -B build/release -G Ninja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_B
 
 ![debug build](screenshots/debug.png)
 ![release build](screenshots/release.png)
+
+## 5. Diagnosing a missing requirement
+In `source/libraries/fibonacci/CMakeLists.txt` I temporarily changed
+
+```cmake
+target_include_directories(fibonacci_lib PUBLIC include)
+```
+to `PRIVATE` and rebuilt Debug with `cmake --build build/debug`:
+
+```
+mac@MacBook-Pro-mac - % cmake --build build/debug
+[0/1] Re-running CMake...
+-- Configuring done (0.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: /Users/mac/Documents/c++/-/build/debug
+[1/3] Building CXX object application/CMakeFiles/fibonacci_app.dir/src/main.cpp.o
+FAILED: [code=1] application/CMakeFiles/fibonacci_app.dir/src/main.cpp.o 
+/opt/homebrew/opt/llvm@19/bin/clang++   -g -std=c++23 -arch arm64 -MD -MT application/CMakeFiles/fibonacci_app.dir/src/main.cpp.o -MF application/CMakeFiles/fibonacci_app.dir/src/main.cpp.o.d -o application/CMakeFiles/fibonacci_app.dir/src/main.cpp.o -c /Users/mac/Documents/c++/-/source/application/src/main.cpp
+/Users/mac/Documents/c++/-/source/application/src/main.cpp:2:10: fatal error: 'fibonacci.hpp' file not found
+    2 | #include "fibonacci.hpp"
+      |          ^~~~~~~~~~~~~~~
+1 error generated.
+ninja: build stopped: subcommand failed.
+```
+
+### Failing stage
+CMake's **configure and generate** steps still succeed, to CMake this is a valid project, it just has fewer requirements. The failure is at compile time, in the preprocessing part of compiling `main.cpp`: the preprocessor cannot find the file named in `#include`, we never reach linking.
+Only the app fails: `fibonacci.cpp` was not even rebuilt, because its compile command did not change.
+
+### Why the library still has its include path, but the app does not
+**PRIVATE** means "use this only to build the target itself". The `-I` flag stays on `fibonacci_lib`'s own compile commands, so `fibonacci.cpp` still finds its header. `target_link_libraries(fibonacci_app PRIVATE fibonacci_lib)` passes on only the library's **PUBLIC** requirements. There is no longer a public include path, so the app gets nothing and `main.cpp` is compiled with no `-I` flag at all.
+
+### Fix
+Restored `PUBLIC`, rebuilt and ran:
+
+```
+mac@MacBook-Pro-mac - % cmake --build build/debug       
+[0/1] Re-running CMake...
+-- Configuring done (0.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: /Users/mac/Documents/c++/-/build/debug
+[2/3] Linking CXX executable application/fibonacci_app
+mac@MacBook-Pro-mac - % ./build/debug/application/fibonacci_app                                                          
+1
+55
+1
+55
+```
