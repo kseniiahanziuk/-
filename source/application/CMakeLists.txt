@@ -1,11 +1,11 @@
-add_executable(fibonacci_app)
+add_executable(elevator_app)
 
-target_sources(fibonacci_app
+target_sources(elevator_app
     PRIVATE
         src/main.cpp
 )
 
-target_link_libraries(fibonacci_app PRIVATE fibonacci_lib)
+target_link_libraries(elevator_app PRIVATE elevator_lib)
 
-target_compile_features(fibonacci_app PRIVATE cxx_std_23)
-set_target_properties(fibonacci_app PROPERTIES CXX_EXTENSIONS OFF)
+target_compile_features(elevator_app PRIVATE cxx_std_23)
+set_target_properties(elevator_app PROPERTIES CXX_EXTENSIONS OFF)
