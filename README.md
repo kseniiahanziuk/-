@@ -242,3 +242,21 @@ The body `{ Probe item{10 + i}; }` is its own block scope, and that scope is ent
 #### What `return` skips in `leave_early(true)`
 - **Skipped statements:** `Probe third{22};` and `std::println("end of leave_early");` - they come after the `return`, so they never run. `third` is never created, which is why there is no `construct 22` or `destroy 22` for this call.
 - **Still destroyed:** every object that was already constructed when `return` ran - `second` (21) and then `first` (20), in reverse order of creation.
+
+## 5. Explanation:
+### 1. `Elevator service = lift;` vs `lift = service;`
+`Elevator service = lift;` creates a new object, `service`, and initializes it from `lift`, so it uses the copy constructor. `lift = service;` creates nothing: `lift` already exists and its values are overwritten with the ones from `service`, so it uses the copy assignment operator. Both are available because the compiler generates them implicitly when a class does not declare its own. They copy the members one by one (`current_floor_` and `top_floor_`), which is exactly what `Elevator` needs.
+
+### 2. Rejecting a bad top floor in the constructor
+A constructor has no return value, so it cannot return `false` like `go_to`. When the constructor finishes, the object exists and is used as valid. The usual way is to throw an exception, for example `throw std::invalid_argument{"top floor must be at least 1"};` if `top_floor < 1`. Then the object is never created, and the caller can catch the error instead of getting a broken elevator.
+
+### 3. Is `private` enough for the invariant?
+No. `private` only stops code outside the class from changing `current_floor_`. The member functions can still break the rule, so the invariant is kept by how they are written:
+- `current_floor_{1}` - the elevator starts at floor 1.
+- `if (requested < 1 || requested > top_floor_) return false;` - invalid floors are rejected first.
+- `current_floor_ = requested;` - only runs after the check passed.
+
+If `go_to` assigned first and checked later, `go_to(12)` would leave the elevator on floor 12 of a 10-floor building, even though it returns `false`. Also, the constructor does not check `top_floor`, so `Elevator{0}` already breaks the invariant.
+
+### 4. Is `Elevator` destroyed without a destructor?
+Yes. When its scope ends, the compiler-generated destructor runs, just like for `Probe`. `Elevator` only holds two `int`s and owns no resources, so there is nothing to clean up. A hand-written `~Elevator()` would add nothing useful here - it would only make sense for printing a trace like `Probe` does, or for a class that has to release something (memory, a file, a lock).
