@@ -126,3 +126,28 @@ mac@MacBook-Pro-mac - % ./build/debug/application/fibonacci_app
 # Assignment 4
 ## 2. Elevator app run result:
 ![result of elevator run](screenshots/elevator_app_run_result.png)
+
+## 3. Access and const experiments:
+### 1. `lift.current_floor_ = 5;` right after declaring `lift`
+
+![step 1 of stage 3](screenshots/lift_current_floor_insertion.png)
+
+`current_floor_` is declared in the `private:` section, and private members can only be used by the class's own member functions (and friends). `main` is not a member of `Elevator`, so it may not touch it, since the compiler stops at the access check.
+
+Inside `go_to` the assignment is allowed because `go_to` *is* a member function of `Elevator` (`Elevator::go_to`), so it has access to all of the class's private data. Access control is per class, not per object: code that belongs to the class can use the private parts, outside code has to go through the public functions.
+
+### 2. `fixed.go_to(2);` after the final print
+
+![step 2 of stage 3](screenshots/go_to_on_const_obj.png)
+
+The trailing `const` in `int current_floor() const;` is a promise, that the function does not change the object. Because of that promise, it can be called on a `const Elevator` like `fixed` - that is why `fixed.current_floor()` compiles. `go_to` has no such `const`, so the compiler refuses to call it on a const object.
+
+The same declaration would be wrong for `go_to`, because the whole job of `go_to` is to change the object: it assigns `current_floor_ = requested`. Inside a `const` function the members are read-only, so that assignment would not compile.
+
+### 3. `Elevator spare;` right after declaring `lift`
+
+![step 3 of stage 3](screenshots/elevator_with_no_args.png)
+
+The compiler only generates an implicit default constructor for a class that declares **no constructors at all**. `Elevator` declares `Elevator(int top_floor)`, so that automatic default constructor is not generated. The only candidates left are our one-argument constructor and the implicit copy/move constructors, and none of them can be called with zero arguments.
+
+The default member initializers `{1}` do not change this. They are not a constructor - they only say what value a member gets when some constructor runs and does not set that member itself (that is how `current_floor_` becomes 1 in our constructor). Without a constructor that takes no arguments, they are never used for `spare`. The class is left without a default constructor on purpose: an elevator has to be told its top floor.
