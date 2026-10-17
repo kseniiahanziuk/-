@@ -122,3 +122,7 @@ mac@MacBook-Pro-mac - % ./build/debug/application/fibonacci_app
 1
 55
 ```
+
+# Assignment 4
+## 2. Elevator app run result:
+![result of elevator run](screenshots/elevator_app_run_result.png)
