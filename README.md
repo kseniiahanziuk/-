@@ -151,3 +151,94 @@ The same declaration would be wrong for `go_to`, because the whole job of `go_to
 The compiler only generates an implicit default constructor for a class that declares **no constructors at all**. `Elevator` declares `Elevator(int top_floor)`, so that automatic default constructor is not generated. The only candidates left are our one-argument constructor and the implicit copy/move constructors, and none of them can be called with zero arguments.
 
 The default member initializers `{1}` do not change this. They are not a constructor - they only say what value a member gets when some constructor runs and does not set that member itself (that is how `current_floor_` becomes 1 in our constructor). Without a constructor that takes no arguments, they are never used for `spare`. The class is left without a default constructor on purpose: an elevator has to be told its top floor.
+
+## 4. Construction and destruction order:
+### 1. Prediction (written before building)
+```
+construct 1
+construct 2
+inspect 2
+destroy 2
+destroy 2
+destroy 2
+construct 11
+destroy 11
+construct 12
+destroy 12
+construct 20
+construct 21
+construct 20
+construct 22
+end of leave_early
+destroy 22
+destroy 20
+end of main
+destroy 1
+```
+
+### 2. Actual output
+```
+mac@MacBook-Pro-mac - % ./build/debug/probe/probe_app
+construct 1
+construct 2
+inspect 2
+destroy 2
+destroy 2
+destroy 2
+construct 11
+destroy 11
+construct 12
+destroy 12
+construct 20
+construct 21
+destroy 21
+destroy 20
+construct 20
+construct 22
+end of leave_early
+destroy 22
+destroy 20
+end of main
+destroy 1
+```
+
+### Prediction vs. actual output
+19 of 21 lines matched. The only difference is in `leave_early(true)` - two lines that are in the actual output but missing from my prediction, right after `construct 21`:
+
+```
+destroy 21    <- missing in my prediction
+destroy 20    <- missing in my prediction
+```
+
+**What I thought, and why it turned out to be wrong:** when I made the prediction, I already knew that objects are destroyed when their scope ends, in reverse order and that `copy` and the `probe` parameter of `inspect` are separate copies of `two`. They don't print `construct` because they are made by the copy constructor, not by `Probe(int id)`. So I expected three `destroy 2` lines and a separate `construct`/`destroy` pair for every loop iteration and this part matched the real output.
+
+My mistake was in `leave_early(true)`. I thought that `return` immediately jumps out of the function, so the closing `}` of the `if` block and of the function are never reached. Since I connected destruction with "reaching the `}`", I expected `second` and `first` to never be destroyed, and wrote no `destroy` lines for that call.
+
+The actual output has `destroy 21` and `destroy 20` right after `construct 21`. This showed me that destruction is not tied to physically reaching the brace, but to leaving the scope in any way - by reaching the end, by `return`, or by an exception. When `return` runs, C++ still destroys every local object that was already constructed, in reverse order: first `second` (21), then `first` (20). `return` only skips the statements after it - here `Probe third{22};` and `std::println("end of leave_early");` - which is why there is no `construct 22` and no `end of leave_early` for the first call.
+
+### 3. Explanation of every destroy line
+- `destroy 2` (1st) - `probe`, the parameter of `inspect`. It is destroyed when `inspect(copy)` returns, before the next statement runs.
+- `destroy 2` (2nd) - `copy`. It is destroyed at the `}` of the inner block in `main`, before `two`, because it was created after it.
+- `destroy 2` (3rd) - `two`. It is destroyed at the same `}` of the inner block.
+- `destroy 11` - `item` from the 1st loop iteration (`i = 1`). It is destroyed at the `}` of the loop body, at the end of that iteration.
+- `destroy 12` - `item` from the 2nd loop iteration (`i = 2`). It is destroyed at the `}` of the loop body, at the end of that iteration.
+- `destroy 21` - `second` in `leave_early(true)`. It is destroyed because `return` left the `if` block.
+- `destroy 20` - `first` in `leave_early(true)`. It is destroyed because the same `return` left the function.
+- `destroy 22` - `third` in `leave_early(false)`. It is destroyed at the closing `}` of `leave_early`, first, because it was created last.
+- `destroy 20` - `first` in `leave_early(false)`. It is destroyed at the same closing `}`.
+- `destroy 1` - `one`. It is destroyed when `return 0;` leaves `main`, after `end of main` was printed.
+
+#### Why `construct 2` appears once, but `destroy 2` three times
+There are three different `Probe` objects with id 2, but only one of them is made by `explicit Probe(int id)`, which is the only constructor that prints:
+1. `two` - `Probe two{2};` calls `Probe(int)` and prints `construct 2`.
+2. `copy` - `Probe copy = two;` is a **copy construction**. It uses the implicit copy constructor that the compiler generated for `Probe`. That constructor just copies `id_` and prints nothing.
+3. `probe` - `inspect(copy)` takes its parameter **by value**, so calling it copy-constructs a new `Probe` from `copy`, again with the silent implicit copy constructor.
+
+All three are real objects, so each gets its own destructor call - and the destructor is the one we wrote, so each of them prints `destroy 2`. This is why the numbers of `construct` and `destroy` lines don't match.
+
+#### Why the loop constructs and destroys on every iteration
+The body `{ Probe item{10 + i}; }` is its own block scope, and that scope is entered and left again on **each** iteration. So `item` is a fresh object every time: it is created when the declaration runs (`construct 11`), and destroyed when the iteration reaches the end of the body (`destroy 11`), before `++i` and the next check. On the next iteration a new `item` is made with `10 + 2` (`construct 12` / `destroy 12`). Two objects never exist at the same time.
+
+#### What `return` skips in `leave_early(true)`
+- **Skipped statements:** `Probe third{22};` and `std::println("end of leave_early");` - they come after the `return`, so they never run. `third` is never created, which is why there is no `construct 22` or `destroy 22` for this call.
+- **Still destroyed:** every object that was already constructed when `return` ran - `second` (21) and then `first` (20), in reverse order of creation.
